@@ -1,0 +1,103 @@
+name: Build native modules
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-24.04
+          - platform: windows
+            os: windows-2022
+          - platform: macos
+            os: macos-14
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends cmake ninja-build pkg-config libluajit-5.1-dev
+
+      - name: Configure and build on Linux
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/install" \
+            -DLUA_INCLUDE_DIR="$(pkg-config --variable=includedir luajit)" \
+            -DLUA_LIBRARY="$(pkg-config --variable=libdir luajit)/libluajit-5.1.so"
+          cmake --build build --target install
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: brew install luajit
+
+      - name: Configure and build on macOS
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          lua_prefix="$(brew --prefix luajit)"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/install" \
+            -DLUA_INCLUDE_DIR="$lua_prefix/include/luajit-2.1" \
+            -DLUA_LIBRARY="$lua_prefix/lib/libluajit-5.1.dylib"
+          cmake --build build --target install
+
+      - name: Set up MSVC
+        if: matrix.platform == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build LuaJIT on Windows
+        if: matrix.platform == 'windows'
+        shell: cmd
+        run: |
+          git clone --depth 1 --branch v2.1 https://github.com/LuaJIT/LuaJIT.git "%RUNNER_TEMP%\LuaJIT"
+          cd /d "%RUNNER_TEMP%\LuaJIT\src"
+          call msvcbuild.bat
+
+      - name: Configure and build on Windows
+        if: matrix.platform == 'windows'
+        shell: cmd
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="%CD%\install" -DLUA_INCLUDE_DIR="%RUNNER_TEMP%\LuaJIT\src" -DLUA_LIBRARY="%RUNNER_TEMP%\LuaJIT\src\lua51.lib"
+          cmake --build build --target install
+
+      - name: Verify module
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            linux) module="install/nuklear.so" ;;
+            macos) module="install/nuklear.so" ;;
+            windows) module="install/nuklear.dll" ;;
+          esac
+          test -f "$module"
+          ls -l "$module"
+
+      - name: Upload module
+        uses: actions/upload-artifact@v4
+        with:
+          name: love-nuklear-${{ matrix.platform }}
+          path: |
+            install/nuklear.so
+            install/nuklear.dll
+          if-no-files-found: error
