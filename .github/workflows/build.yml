@@ -3,6 +3,7 @@ name: Build native modules
 on:
   push:
   pull_request:
+  workflow_dispatch:   # 允许手动触发
 
 permissions:
   contents: read
