@@ -19,8 +19,10 @@ jobs:
             os: ubuntu-24.04
           - platform: windows
             os: windows-2022
-          - platform: macos
+          - platform: macos-arm64
             os: macos-14
+          - platform: macos-x64       # 新增 Intel Mac
+            os: macos-13
 
     steps:
       - name: Check out source
@@ -46,11 +48,11 @@ jobs:
           cmake --build build --target install
 
       - name: Install macOS dependencies
-        if: matrix.platform == 'macos'
+        if: startsWith(matrix.platform, 'macos')   # 同时匹配 macos-arm64 和 macos-x64
         run: brew install luajit
 
       - name: Configure and build on macOS
-        if: matrix.platform == 'macos'
+        if: startsWith(matrix.platform, 'macos')
         shell: bash
         run: |
           lua_prefix="$(brew --prefix luajit)"
@@ -86,9 +88,9 @@ jobs:
         shell: bash
         run: |
           case "${{ matrix.platform }}" in
-            linux) module="install/nuklear.so" ;;
-            macos) module="install/nuklear.so" ;;
-            windows) module="install/nuklear.dll" ;;
+            linux)            module="install/nuklear.so" ;;
+            macos*)           module="install/nuklear.so" ;;   # 通配所有 macOS 平台
+            windows)          module="install/nuklear.dll" ;;
           esac
           test -f "$module"
           ls -l "$module"
