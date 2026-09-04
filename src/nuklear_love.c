@@ -3025,6 +3025,44 @@ int nk_love_edit_unfocus(lua_State *L)
 	return 0;
 }
 
+int nk_love_edit_unfocus(lua_State *L)
+{
+	nk_love_assert_argc(L, lua_gettop(L) == 1);
+	nk_love_assert_context(L, 1);
+	nk_edit_unfocus(&context->nkctx);
+	return 0;
+}
+
+int nk_love_edit_set_selection(lua_State *L)
+{
+	nk_love_assert_argc(L, lua_gettop(L) == 3);
+	nk_love_assert_context(L, 1);
+	nk_uint begin = luaL_checkinteger(L, 2);
+	nk_uint end = luaL_checkinteger(L, 3);
+	nk_edit_set_selection(&context->nkctx, begin, end);
+	return 0;
+}
+
+int nk_love_edit_get_selection_start(lua_State *L)
+{
+	nk_love_assert_argc(L, lua_gettop(L) == 1);
+	nk_love_assert_context(L, 1);
+	nk_uint begin;
+	nk_edit_selection_start(&context->nkctx, &begin);
+	lua_pushinteger(L, begin);
+	return 1;
+}
+
+int nk_love_edit_get_selection_end(lua_State *L)
+{
+	nk_love_assert_argc(L, lua_gettop(L) == 1);
+	nk_love_assert_context(L, 1);
+	nk_uint end;
+	nk_edit_selection_end(&context->nkctx, &end);
+	lua_pushinteger(L, end);
+	return 1;
+}
+
 static int nk_love_popup_begin(lua_State *L)
 {
 	nk_love_assert_argc(L, lua_gettop(L) >= 7);
@@ -4603,6 +4641,9 @@ LUALIB_API int luaopen_nuklear(lua_State *L)
 	NK_LOVE_REGISTER("edit", nk_love_edit);
 	NK_LOVE_REGISTER("editFocus", nk_love_edit_focus);
 	NK_LOVE_REGISTER("editUnfocus", nk_love_edit_unfocus);
+	NK_LOVE_REGISTER("editSetSelection", nk_love_edit_set_selection);
+	NK_LOVE_REGISTER("editGetSelectionStart", nk_love_edit_get_selection_start);
+	NK_LOVE_REGISTER("editGetSelectionEnd", nk_love_edit_get_selection_end);
 	NK_LOVE_REGISTER("popupBegin", nk_love_popup_begin);
 	NK_LOVE_REGISTER("popupClose", nk_love_popup_close);
 	NK_LOVE_REGISTER("popupEnd", nk_love_popup_end);
