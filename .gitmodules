@@ -2,5 +2,3 @@
 	path = src/nuklear
 	url = https://github.com/qwwshs/nuklear.git
 	branch = master
-[submodule "nuklear"]
-	branch = master
