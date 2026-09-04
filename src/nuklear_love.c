@@ -3040,7 +3040,7 @@ int nk_love_edit_get_selection_start(lua_State *L)
 	nk_love_assert_argc(L, lua_gettop(L) == 1);
 	nk_love_assert_context(L, 1);
 	nk_uint begin;
-	nk_edit_selection_start(&context->nkctx, &begin);
+	nk_edit_get_selection_start(&context->nkctx, &begin);
 	lua_pushinteger(L, begin);
 	return 1;
 }
@@ -3050,7 +3050,7 @@ int nk_love_edit_get_selection_end(lua_State *L)
 	nk_love_assert_argc(L, lua_gettop(L) == 1);
 	nk_love_assert_context(L, 1);
 	nk_uint end;
-	nk_edit_selection_end(&context->nkctx, &end);
+	nk_edit_get_selection_end(&context->nkctx, &end);
 	lua_pushinteger(L, end);
 	return 1;
 }
