@@ -58,6 +58,10 @@ struct nk_love_font {
 
 static struct nk_love_context {
 	struct nk_context nkctx;
+	/* Persistent text edit state for the edit widget. nk_edit_string()
+	 * uses the transient nk_context::text_edit scratch which is cleared
+	 * on every call, so it cannot hold a selection between frames. */
+	struct nk_text_edit edit;
 	struct nk_love_font *fonts;
 	int font_count;
 	float *layout_ratios;
@@ -2985,10 +2989,57 @@ static int nk_love_edit(lua_State *L)
 	if (!lua_isstring(L, -1))
 		luaL_argerror(L, 3, "should have a string value");
 	const char *value = lua_tostring(L, -1);
-	size_t len = NK_CLAMP(0, strlen(value), NK_LOVE_EDIT_BUFFER_LEN - 1);
-	memcpy(edit_buffer, value, len);
+	int max = NK_LOVE_EDIT_BUFFER_LEN - 1;
+	int len = (int)strlen(value);
+	if (len > max) len = max;
+	memcpy(edit_buffer, value, (size_t)len);
 	edit_buffer[len] = '\0';
-	nk_flags event = nk_edit_string_zero_terminated(&context->nkctx, flags, edit_buffer, NK_LOVE_EDIT_BUFFER_LEN - 1, nk_filter_default);
+
+	/* Drive the persistent per-context text_edit with nk_edit_buffer()
+	 * instead of nk_edit_string(), which clears its internal scratch on
+	 * every call and would drop a selection the frame after it was set.
+	 * The cursor/selection save-restore of nk_edit_string() is replicated
+	 * below against the state of the focused editor in the current window
+	 * (hash = win->edit.seq matches the hash nk_edit_buffer() will use). */
+	struct nk_context *nkctx = &context->nkctx;
+	struct nk_window *win = nkctx->current;
+	struct nk_text_edit *edit = &context->edit;
+	nk_hash hash = win->edit.seq;
+	nk_textedit_clear_state(edit, (flags & NK_EDIT_MULTILINE)?
+		NK_TEXT_EDIT_MULTI_LINE: NK_TEXT_EDIT_SINGLE_LINE, nk_filter_default);
+	if (win->edit.active && hash == win->edit.name) {
+		if (flags & NK_EDIT_NO_CURSOR)
+			edit->cursor = nk_utf_len(edit_buffer, len);
+		else edit->cursor = win->edit.cursor;
+		if (!(flags & NK_EDIT_SELECTABLE)) {
+			edit->select_start = win->edit.cursor;
+			edit->select_end = win->edit.cursor;
+		} else {
+			edit->select_start = win->edit.sel_start;
+			edit->select_end = win->edit.sel_end;
+		}
+		edit->mode = win->edit.mode;
+		edit->scrollbar.x = (float)win->edit.scrollbar.x;
+		edit->scrollbar.y = (float)win->edit.scrollbar.y;
+		edit->active = nk_true;
+	} else edit->active = nk_false;
+
+	max = NK_MAX(1, max);
+	len = NK_MIN(len, max - 1);
+	nk_str_init_fixed(&edit->string, edit_buffer, (nk_size)max);
+	edit->string.buffer.allocated = (nk_size)len;
+	edit->string.len = nk_utf_len(edit_buffer, len);
+	nk_flags event = nk_edit_buffer(nkctx, flags, edit, nk_filter_default);
+	len = (int)edit->string.buffer.allocated;
+	if (edit->active) {
+		win->edit.cursor = edit->cursor;
+		win->edit.sel_start = edit->select_start;
+		win->edit.sel_end = edit->select_end;
+		win->edit.mode = edit->mode;
+		win->edit.scrollbar.x = (nk_uint)edit->scrollbar.x;
+		win->edit.scrollbar.y = (nk_uint)edit->scrollbar.y;
+	}
+	edit_buffer[NK_MIN(NK_MAX(max - 1, 0), len)] = '\0';
 	lua_pushstring(L, edit_buffer);
 	lua_pushvalue(L, -1);
 	lua_setfield(L, 3, "value");
@@ -3029,9 +3080,19 @@ int nk_love_edit_set_selection(lua_State *L)
 {
 	nk_love_assert_argc(L, lua_gettop(L) == 3);
 	nk_love_assert_context(L, 1);
-	nk_uint begin = luaL_checkinteger(L, 2);
-	nk_uint end = luaL_checkinteger(L, 3);
-	nk_edit_set_selection(&context->nkctx, begin, end);
+	int begin = (int)luaL_checkinteger(L, 2);
+	int end = (int)luaL_checkinteger(L, 3);
+	nk_edit_set_selection(&context->edit, begin, end);
+	/* Mirror the clamped values into the focused editor of the current
+	 * window. nk_love_edit() clears context->edit on every call and only
+	 * restores it from the window state of the focused editor, so without
+	 * this the selection would be gone on the next frame. */
+	struct nk_context *nkctx = &context->nkctx;
+	if (nkctx->current && nkctx->current->edit.active && context->edit.active) {
+		nkctx->current->edit.sel_start = context->edit.select_start;
+		nkctx->current->edit.sel_end = context->edit.select_end;
+		nkctx->current->edit.cursor = context->edit.cursor;
+	}
 	return 0;
 }
 
@@ -3039,9 +3100,7 @@ int nk_love_edit_get_selection_start(lua_State *L)
 {
 	nk_love_assert_argc(L, lua_gettop(L) == 1);
 	nk_love_assert_context(L, 1);
-	nk_uint begin;
-	begin = nk_edit_get_selection_start(&context->nkctx);
-	lua_pushinteger(L, begin);
+	lua_pushinteger(L, nk_edit_get_selection_start(&context->edit));
 	return 1;
 }
 
@@ -3049,9 +3108,7 @@ int nk_love_edit_get_selection_end(lua_State *L)
 {
 	nk_love_assert_argc(L, lua_gettop(L) == 1);
 	nk_love_assert_context(L, 1);
-	nk_uint end;
-	end = nk_edit_get_selection_end(&context->nkctx);
-	lua_pushinteger(L, end);
+	lua_pushinteger(L, nk_edit_get_selection_end(&context->edit));
 	return 1;
 }
 
