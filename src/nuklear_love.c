@@ -3025,14 +3025,6 @@ int nk_love_edit_unfocus(lua_State *L)
 	return 0;
 }
 
-int nk_love_edit_unfocus(lua_State *L)
-{
-	nk_love_assert_argc(L, lua_gettop(L) == 1);
-	nk_love_assert_context(L, 1);
-	nk_edit_unfocus(&context->nkctx);
-	return 0;
-}
-
 int nk_love_edit_set_selection(lua_State *L)
 {
 	nk_love_assert_argc(L, lua_gettop(L) == 3);
